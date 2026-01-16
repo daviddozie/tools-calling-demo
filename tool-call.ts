@@ -372,6 +372,71 @@ async function runErrorHandlingExample() {
     }
 }
 
+async function runStreamingExample() {
+    console.log('\n\nStreaming with Tool Calls Example\n');
+
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+        {
+            role: 'user',
+            content: 'What\'s the weather in London and calculate the total for $50 with 10% tax?',
+        },
+    ];
+
+    console.log('User:', messages[0].content);
+    console.log('Assistant: ', '');
+
+    const stream = await openai.chat.completions.create({
+        model: 'openai/gpt-4o-mini',
+        messages: messages,
+        tools: tools,
+        stream: true,
+    });
+
+    let toolCalls: any[] = [];
+    let currentToolCall: any = null;
+
+    for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta;
+
+        if (delta?.tool_calls) {
+            for (const toolCallDelta of delta.tool_calls) {
+                if (toolCallDelta.index !== undefined) {
+                    if (!toolCalls[toolCallDelta.index]) {
+                        toolCalls[toolCallDelta.index] = {
+                            id: '',
+                            type: 'function',
+                            function: { name: '', arguments: '' },
+                        };
+                    }
+
+                    currentToolCall = toolCalls[toolCallDelta.index];
+
+                    if (toolCallDelta.id) currentToolCall.id = toolCallDelta.id;
+                    if (toolCallDelta.function?.name) {
+                        currentToolCall.function.name += toolCallDelta.function.name;
+                    }
+                    if (toolCallDelta.function?.arguments) {
+                        currentToolCall.function.arguments += toolCallDelta.function.arguments;
+                    }
+                }
+            }
+        }
+
+        if (delta?.content) {
+            process.stdout.write(delta.content);
+        }
+    }
+
+    console.log('\n');
+
+    if (toolCalls.length > 0) {
+        console.log('Tool calls detected in stream');
+        for (const toolCall of toolCalls) {
+            console.log(`  - ${toolCall.function.name}:`, toolCall.function.arguments);
+        }
+    }
+}
+
 
 // Main execution
 async function main() {
@@ -379,7 +444,8 @@ async function main() {
         // Run all examples
         // await runToolCallingExample();
         // await runMultiTurnExample();
-        await runErrorHandlingExample();
+        // await runErrorHandlingExample();
+        await runStreamingExample();
 
         console.log('\n\n All examples completed!');
         console.log('\n Key Takeaways:');
